@@ -1,0 +1,12 @@
+A Forth for ARM/Ubuntu, developed on and for the NVidia Jetson TK1
+
+Not implemented:
+  Floating point numbers
+  Assembler (;code, end-code)
+
+Highly influenced by:
+    (cf) http://www.bradrodriguez.com/papers/moving1.htm
+         Referred to herein as "Moving Forth"
+This design implements the ITC option, but with primitive code residing
+  outside the dictionary.  Thus, the Code Field contains the address of the
+  corresponding code (including code for ENTERing a high-level definition).

@@ -115,8 +115,12 @@ IMMEDIATE=0x02
         .data
         code star, 0, 1, *, 0
         code dup, 0, 3, dup, star
-        word square, 0, 6, square, dup
-        .word   cf_dup, cf_star, do_exit
+        code exit, 0, 4, exit, dup
+        code bye, 0, 3, bye, exit
+
+@ testing area; see also start:
+        word square, 0, 6, square, bye
+        .word   cf_dup, cf_star, cf_exit
 
 stack_low:
         .rept 4096
@@ -140,17 +144,22 @@ _start:
         
 @ The Forth Interpreter
 
-do_enter:                               @ Pseudocode from Moving Forth, where CELL_WIDTH = 2
+do_enter:                               @ Pseudocode from MF:
         pushrsp r9                      @ PUSH IP
         add r9, r10, #CELL_WIDTH        @ W+2 -> IP
         b do_next
 do_exit:
         poprsp r9                       @ POP IP (from return stack)
-do_next:                                @ JUMP to interpreter ("NEXT"); here, fall through
+do_next:                                @ JUMP to interpreter ("NEXT")
         ldr r10, [r9]                   @ (IP) -> W
         add r9, r9, #CELL_WIDTH         @ IP + 2 -> IP
         ldr r12, [r10]                  @ (W) -> X
         mov pc,r12                      @ JP (X)
+
+@ OS System interfaces
+do_bye:
+        pop r0      @ reinstate this after testing: mov r0,#0
+        syscall 1
 
 @ Built-in primitive code
 do_variable:
@@ -181,7 +190,7 @@ go:
         ldr r13, addr_stack_high
         ldr r11, addr_rstack_high
         @ for testing only
-        ldr r9, =addr_square
+        ldr r9, =start
         mov r1, #5
         push r1
         @ Should end up with 25 on stack
@@ -195,6 +204,6 @@ go:
 @ Necessary lookup tables
 addr_stack_high: .word stack_high
 addr_rstack_high: .word rstack_high
-addr_square: .word cf_square
+start: .word cf_square, cf_bye
 
 @        end
