@@ -202,7 +202,8 @@ cf_2rfetch:
         code tor, 0, 2, >r, 2rfrom
         code rfrom, 0, 2, r>, tor
         code emit, 0, 4, emit, rfrom
-        variable here, 0, 4, here, emit
+        code starslash, 0, 2, */, emit
+        variable here, 0, 4, here, starslash
         variable base, 0, 4, base, here
         word decimal, 0, 7, decimal, base
           .word cf_lit, 10, cf_base, cf_store, cf_exit
@@ -566,6 +567,91 @@ do_depth:
         lsr r1, #2              @ Divide by 4
         push r1
         next
+
+/* 
+ Algorithm for dividing a 64-bit number by a 32-bit number
+ D = r6|r3 denominator (2 registers; left register initially 0)
+ N = r5|r4 numerator (2 registers)
+ Q = r2    Quotient
+ R = r4    Remainder
+ S = r0    Shift counter
+ All shifting, comparing, and subtracting are 2-register operations
+ 
+ Q = S = 0;
+ while  D <= N:
+   shift left D one bit
+   increment S
+ shift right D one bit
+ while S > 0:
+   set shift bit to 0
+   if D <= N:
+     set shift bit to 1
+     N <-- N - D
+   shift computed bit left into Q
+   shift right D one bit
+   S--
+ R = N
+*/
+@ Multiply/Divide, with long internal product ( n1 n2 n3 -- n1*n2/n3 )
+@ TODO: Make this generally useful (/, /mod, etc.)
+do_starslash:
+        pop r3
+        pop r2
+        pop r1
+        umull r4, r5, r2, r1    @ (n1*n2 -> r5|r4 (r4 - low order)        
+        @ See algorithm above; N = r5|r4
+        @                      D = r6|r3
+        @ Leave Q in r2, R in r4
+        @ Fix up later for signed operations
+        mov r2, #0              @ Q
+        mov r6, #0              @ Upper word of D
+        mov r0, #0              @ S
+.l1:    cmp r6, r5              @ while D <= N; compare upper words 
+        bhi .l1x                @ if UH(D) > UH(N) exit loop
+        blo .l1b                @ if UH(D) < UH(N) skip comparing LH
+        cmp r3, r4              @ if UH(D) = UH(N) compare LH
+        bhi .l1x                @ if UH(D) > LH(N) exit loop
+.l1b:   lsls r3, r3, #1         @ Shift lower D, saving carry
+        lsl  r6, r6, #1         @ Shift upper D, don't change carry
+        bcc .l1c                @ Carry not set, don't add on
+        add  r6, r6, #1         @ Add 1 if carry was set 
+.l1c:   add  r0, r0, #1         @ Increment S
+        b   .l1
+.l1x:                           @ End of first loop
+        lsrs r6, r6, #1         @ Shift right one bit; save Carry
+        lsr  r3, r3, #1         @ Shift right
+        bcc  .l2
+        orr  r3, r3, #0x80000000
+.l2:    
+.l2a:   cmp  r0, #0
+        beq  .l2x
+
+        @ See algorithm above; N = r5|r4
+        @                      D = r6|r3
+
+        mov r1, #0              @ Initialize shift bit to 0
+        cmp r6, r5              @ D > N?
+        bhi .l2_endif           @ if UH(D) > UH(N), skip
+        blo .l2_then            @ if UH(D) < UH(N), then D < N
+        cmp r3, r4              @ We are here if the upper halves match
+        bhi .l2_endif           @ same for LH(D) > UH(N)
+.l2_then:
+        mov r1, #1              @ Will shift a 1
+        subs r4, r4, r3         @ N <- N - D
+        subs r5, r5, r6
+.l2_endif:
+        lsl r2, r2, #1          @ Yes, Shift in the computed bit 
+        add r2, r2, r1
+        lsrs r6, r6, #1         @ Right shift D 1 bit
+        lsr  r3, r3, #1
+        bcc  .l2c
+        orr  r3, r3, #0x80000000
+.l2c:   sub  r0, r0, #1
+        b .l2a
+.l2x:
+        push r2                 @ Quotient to Stack 
+        next
+
 @ Main entry point
 _start:
         ldr r13, addr_stack_high
@@ -582,7 +668,7 @@ addr_dict_end:    .word dict_end
 addr_stack_high:  .word stack_high
 addr_rstack_high: .word rstack_high
 start:            .word cf_cold 
-                  .word cf_lit, 107, cf_tor, cf_rfrom
-                  .word cf_bye
+                  .word cf_lit, 25, cf_lit, 12, cf_lit, 3
+                  .word cf_starslash, cf_bye
 
 @        end

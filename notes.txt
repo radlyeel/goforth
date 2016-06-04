@@ -3,6 +3,8 @@ A Forth for ARM/Ubuntu, developed on and for the NVidia Jetson TK1
 Not implemented:
   Floating point numbers
   Assembler (;code, end-code)
+  User space (no USER)
+  Block storage (BLK should never be non-zero)
 
 Highly influenced by:
     (cf) http://www.bradrodriguez.com/papers/moving1.htm
