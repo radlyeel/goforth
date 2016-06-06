@@ -592,13 +592,7 @@ do_depth:
    S--
  R = N
 */
-@ Multiply/Divide, with long internal product ( n1 n2 n3 -- n1*n2/n3 )
-@ TODO: Make this generally useful (/, /mod, etc.)
-do_starslash:
-        pop r3
-        pop r2
-        pop r1
-        umull r4, r5, r2, r1    @ (n1*n2 -> r5|r4 (r4 - low order)        
+div_64_32:
         @ See algorithm above; N = r5|r4
         @                      D = r6|r3
         @ Leave Q in r2, R in r4
@@ -649,6 +643,17 @@ do_starslash:
 .l2c:   sub  r0, r0, #1
         b .l2a
 .l2x:
+        bx lr
+
+@ Multiply/Divide, with long internal product ( n1 n2 n3 -- n1*n2/n3 )
+@ TODO: Make this generally useful (/, /mod, etc.)
+do_starslash:
+        pop r3
+        pop r2
+        pop r1
+        umull r4, r5, r2, r1    @ (n1*n2 -> r5|r4 (r4 - low order)        
+        bl div_64_32
+dosl:
         push r2                 @ Quotient to Stack 
         next
 
@@ -668,7 +673,7 @@ addr_dict_end:    .word dict_end
 addr_stack_high:  .word stack_high
 addr_rstack_high: .word rstack_high
 start:            .word cf_cold 
-                  .word cf_lit, 25, cf_lit, 12, cf_lit, 3
+                  .word cf_lit, -5, cf_lit, 2, cf_lit, 7
                   .word cf_starslash, cf_bye
 
 @        end

@@ -1,0 +1,7 @@
+# Vim backup files
+*~
+
+# Make artifacts
+goforth
+*.lst
+*.o
