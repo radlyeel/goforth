@@ -570,11 +570,10 @@ do_depth:
 
 /* 
  Algorithm for dividing a 64-bit number by a 32-bit number
- D = r6|r3 denominator (2 registers; left register initially 0)
- N = r5|r4 numerator (2 registers)
- Q = r2    Quotient
- R = r4    Remainder
- S = r0    Shift counter
+ D = r6|r0 denominator (2 registers; left register initially 0)
+ N = r1|r2 numerator (2 registers)
+ Q = r5    Quotient
+ S = r3    Shift counter
  All shifting, comparing, and subtracting are 2-register operations
  
  Q = S = 0;
@@ -590,71 +589,137 @@ do_depth:
    shift computed bit left into Q
    shift right D one bit
    S--
- R = N
+ Q holds quotient
+ N(low) holds remainder
+
+
+ For Floored and Symmetric Division, see Forth Programmer's Handbook, 2.2.1
+   Let Sn = Sign of Numerator
+       Sd = Sign of Denomerator
+       Qn = Quotient from division of absolute values
+       Rn = Remaninder from division of absolute values
+       Qf = Quotient of Floored division
+       Rf = Remainder of Floored division
+       Qs = Quotient of Symmetric division
+       Rs = Remainder of Symmetric division
+ Floored division:
+   Sn = Sd -> Qf = Qn, Rf = Rn*Sd
+        else  Rn != 0 -> Qf = -Qn - 1, Rf = Den - Rn*Sd
+                    else Qf = -Qn, Rf = Rn
+ Symmetric division:
+   Qs = Qs*Sd*Sn, Rs = Rn*Sd
 */
 div_64_32:
-        @ See algorithm above; N = r5|r4
-        @                      D = r6|r3
-        @ Leave Q in r2, R in r4
+        @ In keeping with the recommendations for calling subroutines:
+        @  Inputs
+        @   r0    = Denominator
+        @   r1|r2 = Numerator
+        @  Outputs
+        @   r0 = Quotient
+        @   r1 = Remainder
+        @  All other registers preserved
+
+        @ See algorithm above; N = r1|r2
+        @                      D = r6|r0
+        @ Leave Q in r0, R in r1
         @ Fix up later for signed operations
-        mov r2, #0              @ Q
+        stmfd r13!, {r3-r6}
+        mov r5, #0              @ Q
         mov r6, #0              @ Upper word of D
-        mov r0, #0              @ S
-.l1:    cmp r6, r5              @ while D <= N; compare upper words 
+        mov r3, #0              @ S
+.l1:    cmp r6, r1              @ while D <= N; compare upper words 
         bhi .l1x                @ if UH(D) > UH(N) exit loop
         blo .l1b                @ if UH(D) < UH(N) skip comparing LH
-        cmp r3, r4              @ if UH(D) = UH(N) compare LH
+        cmp r0, r2              @ if UH(D) = UH(N) compare LH
         bhi .l1x                @ if UH(D) > LH(N) exit loop
-.l1b:   lsls r3, r3, #1         @ Shift lower D, saving carry
+.l1b:   lsls r0, r0, #1         @ Shift lower D, saving carry
         lsl  r6, r6, #1         @ Shift upper D, don't change carry
         bcc .l1c                @ Carry not set, don't add on
         add  r6, r6, #1         @ Add 1 if carry was set 
-.l1c:   add  r0, r0, #1         @ Increment S
+.l1c:   add  r3, r3, #1         @ Increment S
         b   .l1
 .l1x:                           @ End of first loop
         lsrs r6, r6, #1         @ Shift right one bit; save Carry
-        lsr  r3, r3, #1         @ Shift right
+        lsr  r0, r0, #1         @ Shift right
         bcc  .l2
-        orr  r3, r3, #0x80000000
+        orr  r0, r0, #0x80000000
 .l2:    
-.l2a:   cmp  r0, #0
+.l2a:   cmp  r3, #0
         beq  .l2x
-
-        @ See algorithm above; N = r5|r4
-        @                      D = r6|r3
-
-        mov r1, #0              @ Initialize shift bit to 0
-        cmp r6, r5              @ D > N?
+        mov r4, #0              @ Initialize shift bit to 0
+        cmp r6, r1              @ D > N?
         bhi .l2_endif           @ if UH(D) > UH(N), skip
         blo .l2_then            @ if UH(D) < UH(N), then D < N
-        cmp r3, r4              @ We are here if the upper halves match
+        cmp r0, r2              @ We are here if the upper halves match
         bhi .l2_endif           @ same for LH(D) > UH(N)
 .l2_then:
-        mov r1, #1              @ Will shift a 1
-        subs r4, r4, r3         @ N <- N - D
-        subs r5, r5, r6
+        mov r4, #1              @ Will shift a 1
+        subs r2, r2, r0         @ N <- N - D
+        subs r1, r1, r6
 .l2_endif:
-        lsl r2, r2, #1          @ Yes, Shift in the computed bit 
-        add r2, r2, r1
+        lsl r5, r5, #1          @ Yes, Shift in the computed bit 
+        add r5, r5, r4
         lsrs r6, r6, #1         @ Right shift D 1 bit
-        lsr  r3, r3, #1
+        lsr  r0, r0, #1
         bcc  .l2c
-        orr  r3, r3, #0x80000000
-.l2c:   sub  r0, r0, #1
+        orr  r0, r0, #0x80000000
+.l2c:   sub  r3, r3, #1
         b .l2a
 .l2x:
+        mov r0, r5              @ Quotient to r0
+        mov r1, r2              @ Remainder to r1
+        ldmfd r13!, {r3-r6}             @ Restore registers
         bx lr
 
 @ Multiply/Divide, with long internal product ( n1 n2 n3 -- n1*n2/n3 )
 @ TODO: Make this generally useful (/, /mod, etc.)
 do_starslash:
-        pop r3
-        pop r2
-        pop r1
-        umull r4, r5, r2, r1    @ (n1*n2 -> r5|r4 (r4 - low order)        
+        pop r0                  @ n3
+        pop r2                  @ n2
+        pop r1                  @ n1
+        smull r4, r3, r2, r1    @ (n1*n2 -> r1|r2 (r2 - low order)        
+        mov r2, r4
+        mov r1, r3
+        @ Save signs and send absolute values to subroutine
+        mov r3, #1              @ Numerator's sign in r3 (1 or -1)
+        cmp r1, #0              @ The sign of r1|r2 is in r1
+        bge .dosl1
+        mov r3, #-1
+        mvn r1, r1              @ 64-bit absolute value
+        mvn r2, r2
+        adds r2, r2, #1
+        adc r1, r1, #0
+.dosl1: mov r4, #1              @ Denominator's sign in r4 (1 or -1)
+        cmp r0, #0
+        bge .dosl2
+        mov r4, #-1
+        mvn r0, r0
+        add r0, r0, #1
+.dosl2:
+        @ Now call the division subroutine
+        @ But save the denominator first
+        push r0
         bl div_64_32
-dosl:
-        push r2                 @ Quotient to Stack 
+        pop  r5                 @ Original Denominator to r5
+.dosl3:
+        @ This function obeys Floored division
+        cmp r3, r4              @ Sd = Sn?
+        bne .dosl4
+        mul r2, r1, r4          @ Yes; Qf = Qn; Rf = Rn * Sd
+        mov r1, r2
+        b .dosl_done
+.dosl4: cmp r1, #0              @ Rn = 0?
+        bne .dosl5
+        mvn r0, r0              @ Yes; Qf = -Qn - 1...
+        add r0, r0, #1
+        sub r0, r0, #1
+        mul r2, r1, r4          @ ... Rf = Den - Rn*Sd
+        sub r1, r5, r2
+        b .dosl_done
+.dosl5: mvn r0, r0              @ No; Qf = -Qn; Rf = Rn
+        add r0, r0, #1
+.dosl_done:
+        push r0                 @ Quotient to stack
         next
 
 @ Main entry point
@@ -673,7 +738,7 @@ addr_dict_end:    .word dict_end
 addr_stack_high:  .word stack_high
 addr_rstack_high: .word rstack_high
 start:            .word cf_cold 
-                  .word cf_lit, -5, cf_lit, 2, cf_lit, 7
+                  .word cf_lit, 5, cf_lit, 2, cf_lit, -7
                   .word cf_starslash, cf_bye
 
 @        end
