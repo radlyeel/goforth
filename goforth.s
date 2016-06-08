@@ -203,7 +203,9 @@ cf_2rfetch:
         code rfrom, 0, 2, r>, tor
         code emit, 0, 4, emit, rfrom
         code starslash, 0, 2, */, emit
-        variable here, 0, 4, here, starslash
+        code branch, 0, 6, branch, starslash
+        code 0branch, 0, 7, 0branch, branch
+        variable here, 0, 4, here, 0branch
         variable base, 0, 4, base, here
         word decimal, 0, 7, decimal, base
           .word cf_lit, 10, cf_base, cf_store, cf_exit
@@ -722,6 +724,19 @@ do_starslash:
         push r0                 @ Quotient to stack
         next
 
+@ Branching functions
+do_branch:                      @ Branch always; offset is pointed to by IP
+        ldr r0, [r9]            @ Get the offset
+        add r9, r9, r0          @ Adjust IP by offset
+        next
+
+do_0branch:                     @ Branch if TOS = 0
+        pop r1
+        cmp r1, #0
+        beq do_branch
+        add r9, r9, #CELL_WIDTH @ Didn't branch; skip offset
+        next
+
 @ Main entry point
 _start:
         ldr r13, addr_stack_high
@@ -738,7 +753,10 @@ addr_dict_end:    .word dict_end
 addr_stack_high:  .word stack_high
 addr_rstack_high: .word rstack_high
 start:            .word cf_cold 
-                  .word cf_lit, 5, cf_lit, 2, cf_lit, -7
-                  .word cf_starslash, cf_bye
+                  .word cf_lit, 0, cf_0branch, st1-.    @ 1 if
+                  .word   cf_lit, 3, cf_branch, st2-.   @   3
+st1:              .word   cf_lit, 4                     @ else 4
+st2:                                                    @ then
+                  .word cf_bye
 
 @        end
