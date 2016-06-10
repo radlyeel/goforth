@@ -2,10 +2,11 @@
 @    (c)  Daryl Lee, 2016
 @    (cf) http://www.bradrodriguez.com/papers/moving1.htm
 @         Referred to herein as "Moving Forth"
-@ Originated with YASM/ebe; migrated to GNU as for ARM implementation
+@    (cf) http://www.sifflez.org/lectures/ASE/C3.pdf
+@    (cf) https://github.com/AlexandreAbreu/jonesforth
+@         Referred to herein as "JonesForth"
 @
 @ Environment Controls
-ARM=1                            @ OSX, LINUX, WINDOWS, ARM
 CELL_WIDTH=4
 
 @ FORTH registers (See Moving Forth)
@@ -202,10 +203,12 @@ cf_2rfetch:
         code tor, 0, 2, >r, 2rfrom
         code rfrom, 0, 2, r>, tor
         code emit, 0, 4, emit, rfrom
-        code starslash, 0, 2, */, emit
+        code type, 0, 4, type, emit
+        code starslash, 0, 2, */, type
         code branch, 0, 6, branch, starslash
         code 0branch, 0, 7, 0branch, branch
-        variable here, 0, 4, here, 0branch
+        code find, 0, 4, find, 0branch
+        variable here, 0, 4, here, find
         variable base, 0, 4, base, here
         word decimal, 0, 7, decimal, base
           .word cf_lit, 10, cf_base, cf_store, cf_exit
@@ -215,16 +218,16 @@ cf_2rfetch:
         variable src, 0, 3, src, blk
         word source_id, 0, 8, source-i, src
           .word cf_src, cf_fetch, cf_exit
-        word cold, 0, 4, cold, blk
-          .word cf_lit, dict_end, cf_here, cf_store
+        word cold, IMMEDIATE, 4, cold, blk
+          .word cf_lit, dict_bye, cf_here, cf_store
           .word cf_lit, 10, cf_base, cf_store
           .word cf_lit, 0, cf_blk, cf_store
           .word cf_lit, 0, cf_src, cf_store
           .word cf_exit
-        code bye, 0, 3, bye, cold
+        code bye, 0, 3, bye, cold       @@@ Keep as last word
 
 @ Save space for dictionary
-dict_end:
+dict_end: .word dict_bye
         .rept 16000
         .word 0
         .endr
@@ -272,12 +275,19 @@ do_bye:
 
 @ Write TOS to console (ref: man 2 write)
 do_emit:
-        mov r0, #1                      @ For stdout
+        mov r2, #1                      @ Send one character
         mov r1, sp                      @ r1 points at character to write
-        mov r2, #1
+do_emit2:
+        mov r0, #1                      @ For stdout
         syscall 4
         pop r1                          @ pop the character off the stack
         next
+
+@ Write text to console (ref: man 2 write)
+do_type:
+        pop r2                          @ Character count
+        pop r1                          @ Address of text
+        b do_emit2
 
 @ Built-in primitive code
 @ Push address of defined variable
@@ -736,6 +746,72 @@ do_0branch:                     @ Branch if TOS = 0
         beq do_branch
         add r9, r9, #CELL_WIDTH @ Didn't branch; skip offset
         next
+@ Case-insensitive word search
+do_find:                        @ ( c-addr -- c-addr 0 | xt 1 | xt -1 )
+        pop r8                  @ Hold onto the c-addr; we may need it later
+        ldrb r1, [r8]           @ Get one-byte count
+        add r0, r8, #1          @ r0 holds the target address, r1 the count
+        ldr r2, addr_here       @ Get current value of HERE
+        ldr r2,[r2, #CELL_WIDTH]
+do_find_loop:
+        ldrh r3, [r2, #2]       @ r3 now holds length of dictionary entry
+        add r4, r2, #CELL_WIDTH
+                                @ Compare [r0, r1] to [r4, r3]
+                                @   where [rn, rm] = [address, count]
+        cmp r1, r3              @ Do lengths match?
+        bne do_find_mismatch
+        @ r0  : target starting address
+        @ r1  : target length
+        @ r2  : dictionary entry address
+        @ r3  : dictionary name length
+        @ r4  : dictionary name address
+        @ r8  : target c-addr
+        cmp r3, #8              @ Test only the first 8 characters
+        ble do_find_1
+        mov r3, #8
+do_find_1:
+        mov r5, #0              @ r5 is the index
+do_find_next:
+        ldrb r6, [r0, r5]       @ Get char from target
+        cmp r6, #'a             @ Upcase it if alphabetic
+        blt do_find_2
+        cmp r6, #'z
+        bgt do_find_2
+        and r6, #0xdf
+do_find_2:
+        ldrb r7, [r4, r5]        @ Get char from dictionary
+        cmp r7, #'a             @ Upcase it if alphabetic
+        blt do_find_3
+        cmp r7, #'z
+        bgt do_find_3
+        and r7, #0xdf
+do_find_3:
+        cmp r6, r7              @ Do characters match?
+        bne do_find_mismatch
+        add r5, #1              @ Yes, increment index
+        cmp r5, r3              @ Tested all characters?
+        bne do_find_next        @ No, keep testing
+do_find_found:
+        add r0, r2, #16         @ Found match!  Get xt
+        push r0
+        mov r1, #-1             @ Return -1 if not immediate
+        ldrh r0, [r2]           @ Get immediate bit
+        ands r0, #IMMEDIATE
+        beq do_find_5
+        mov r1, #1              @ Else return 1
+do_find_5:
+        push r1
+        b do_find_done
+do_find_mismatch:               @ Mismatch--keep searching
+        ldr r2, [r2, #12]       @ Get address of preceding entry
+        cmp r2, #0
+        bne do_find_loop
+do_find_failed:
+        push r8                 @ We're here if there is no matching entry
+        mov r0, #0
+        push r0        
+do_find_done:
+        next
 
 @ Main entry point
 _start:
@@ -752,11 +828,18 @@ _start:
 addr_dict_end:    .word dict_end
 addr_stack_high:  .word stack_high
 addr_rstack_high: .word rstack_high
+addr_here:        .word cf_here
+text:             .ascii "Hello, world\n"
+text_len=.-text
+target:           .byte 4
+                  .ascii "xxxx"
 start:            .word cf_cold 
-                  .word cf_lit, 0, cf_0branch, st1-.    @ 1 if
-                  .word   cf_lit, 3, cf_branch, st2-.   @   3
-st1:              .word   cf_lit, 4                     @ else 4
-st2:                                                    @ then
-                  .word cf_bye
+@                  .word cf_lit, 0, cf_0branch, st1-.    @ 1 if
+@                  .word   cf_lit, 3, cf_branch, st2-.   @   3
+@st1:              .word   cf_lit, 4                     @ else 4
+@st2:                                                    @ then
+@                   .word cf_lit, text, cf_lit, text_len, cf_type
+                   .word cf_lit, target, cf_find 
+                   .word cf_bye
 
 @        end
