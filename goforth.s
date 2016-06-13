@@ -752,7 +752,7 @@ do_find:                        @ ( c-addr -- c-addr 0 | xt 1 | xt -1 )
         ldrb r1, [r8]           @ Get one-byte count
         add r0, r8, #1          @ r0 holds the target address, r1 the count
         ldr r2, addr_here       @ Get current value of HERE
-        ldr r2,[r2, #CELL_WIDTH]
+        ldr r2,[r2]
 do_find_loop:
         ldrh r3, [r2, #2]       @ r3 now holds length of dictionary entry
         add r4, r2, #CELL_WIDTH
@@ -828,11 +828,11 @@ _start:
 addr_dict_end:    .word dict_end
 addr_stack_high:  .word stack_high
 addr_rstack_high: .word rstack_high
-addr_here:        .word cf_here
+addr_here:        .word cf_here+CELL_WIDTH
 text:             .ascii "Hello, world\n"
 text_len=.-text
 target:           .byte 4
-                  .ascii "xxxx"
+                  .ascii "over"
 start:            .word cf_cold 
 @                  .word cf_lit, 0, cf_0branch, st1-.    @ 1 if
 @                  .word   cf_lit, 3, cf_branch, st2-.   @   3
