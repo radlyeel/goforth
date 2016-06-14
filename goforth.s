@@ -124,7 +124,11 @@ dict_0: .word 0         @ Terminate dictionary search here
         code star, 0, 1, *
 
         @ 6.1.0100 */
-        code starslash, 0, 2, */
+        word starslash, 0, 2, */
+          .word cf_starslashmod, cf_nip, cf_exit
+
+        @ 6.1.0110 */
+        code starslashmod, 0, 5, */mod
 
         @ 6.1.0120 +
         code plus, 0, 1, +
@@ -153,8 +157,49 @@ dict_latest=dict_comma
         @ 6.1.0160 -
         code minus, 0, 1, -
 
+        @ 6.1.0230 /
+        word slash, 0 1, /
+          .word cf_slashmod, cf_nip, cf_exit
+
+        @ 6.1.0240 /MOD
+        word slashmod, 0 4, /mod
+          .word cf_lit, 1, cf_rot, cf_rot, cf_starslashmod, cf_exit
+
+        @ 6.1.0250 0<
+        code 0less, 0, 2, 0<
+        
+        @ 6.1.0270 0=
+        @code 0equal, 0, 2, 0=
+dict_0equal:
+        .hword 0
+        .hword 2
+        .ascii "0="
+        .rept 6
+        .byte 0
+        .endr
+        .word dict_latest
+cf_0equal:
+        .word do_0equal
+dict_latest=dict_0equal
+       
+        @ 6.1.0290 1+
+        word oneplus, 0, 2, 1+
+          .word cf_lit, 1, cf_plus, cf_exit 
+       
+        @ 6.1.0300 10
+        word oneminus, 0, 2, 1-
+          .word cf_lit, 1, cf_minus, cf_exit 
+
         @ 6.1.0310 2!
         code 2store, 0, 2, 2!
+
+        @ 6.1.0320 2*
+        word 2star, 0, 2, 2*
+          .word cf_lit, 2, cf_star, cf_exit
+
+        @ 6.1.0330 2/
+        word 2slash, 0, 2, 2/
+          .word cf_lit, 2, cf_slash, cf_exit
 
         @ 6.1.0350 2@
         @ code 2fetch, 0, 2, 2@
@@ -181,6 +226,26 @@ dict_latest=dict_2fetch
 
         @ 6.1.0430 2SWAP
         code 2swap, 0, 5, 2swap
+
+        @ 6.1.0480 <
+        code less, 0, 1, <
+
+        @ 6.1.0530 =
+        @code equal, 0, 1, =
+dict_equal:
+        .hword 0
+        .hword 1
+        .ascii "="
+        .rept 7
+        .byte 0
+        .endr
+        .word dict_latest
+cf_equal:
+        .word do_equal
+dict_latest=dict_equal
+
+        @ 6.1.0540 >
+        code greater, 0, 1, >
 
         @ 6.1.0580 >R
         code tor, 0, 2, >r
@@ -213,8 +278,14 @@ dict_latest=dict_fetch
         @ 6.1.0710 ALLOT
         code allot, 0, 5, allot
 
+        @ 6.1.0720 AND
+        code and, 0, 3, and
+
         @ 6.1.0750 BASE
         variable base, 0, 4, base
+
+        @ 6.1.0770 BL
+        constant bl, 0, 2, bl, 0x20
 
         @ 6.1.0850 C!
         code cstore, 0, 2, c!
@@ -262,6 +333,13 @@ dict_latest=dict_cfetch
         word chars, 0, 5, chars
           .word cf_exit     @ In this implementation, it's a no-op
 
+        @ 6.1.0980 COUNT
+        code count, 0, 5, count
+        
+        @ 6.1.0990 CR
+        word cr, 0, 2, cr
+          .word cf_lit, 10, cf_emit, cf_exit
+  
         @ 6.1.1170 DECIMAL
         word decimal, 0, 7, decimal
           .word cf_lit, 10, cf_base, cf_store, cf_exit
@@ -286,9 +364,28 @@ dict_latest=dict_cfetch
         
         @ 6.1.1650 HERE
         variable here, 0, 4, here
+
+        @ 6.1.1720 INVERT
+        code invert, 0, 6, invert
         
         @ 6.1.1780 LITERAL
         code lit, 0, 7, literal
+
+        @ 6.1.1805 LSHIFT
+        code lshift, 0, 6, lshift
+
+        @ 6.1.1870 MAX
+        code max, 0, 3, max
+
+        @ 6.1.1880 MIN
+        code min, 0, 3, min
+
+        @ 6.1.1910 NEGATE
+        word negate, 0, 7, negate
+          .word cf_lit, 0, cf_swap, cf_minus, cf_exit
+
+        @ 6.1.1980 OR
+        code or, 0, 2, or
 
         @ 6.1.1990 OVER
         code over, 0, 4, over
@@ -313,11 +410,34 @@ dict_latest=dict_rfetch
         @ 6.1.2160 ROT
         code rot, 0, 3, rot
 
+        @ 6.1.2162 RSHIFT
+        code rshift, 0, 6, rshift
+
+        @ 6.1.2220 SPACE
+        word space, 0, 5, space
+          .word cf_bl, cf_emit, cf_exit
+
+        @ 6.1.2230 SPACES
+        word spaces, 0, 6, spaces
+spaces_1: .word cf_qdup, cf_0equal, cf_invert, cf_0branch, spaces_2-.
+          .word cf_space, cf_oneminus, cf_branch, spaces_1-.
+spaces_2: .word cf_exit
+
         @ 6.1.2260 SWAP
         code swap, 0, 4, swap
 
         @ 6.1.2310 TYPE
         code type, 0, 4, type
+
+        @ 6.1.2490 XOR
+        code xor, 0, 3, xor
+
+        @ 6.2.0260 0<>
+        word not0, 0, 3, 0<>
+          .word cf_0equal, cf_invert, cf_exit
+
+        @ 6.2.0280 0>
+        code 0greater, 0, 2, 0>
 
         @ 6.2.0340 2>R
         code 2tor, 0, 3, 2>r
@@ -339,29 +459,42 @@ cf_2rfetch:
         .word do_2rfetch        
 dict_latest=dict_2rfetch
 
+        @ 6.2.0500 <>
+        word notequal, 0, 2, <>
+          .word cf_0equal, cf_invert, cf_exit
+
+        @ 6.2.1485 FALSE
+        word false, 0, 5, false
+          .word cf_lit, 0, cf_exit
+
         @ 6.2.1660 HEX
         word hex, 0, 3, hex
+          .word cf_lit, 16, cf_base, cf_store, cf_exit
 
         @ 6.2.1930 NIP
         code nip, 0, 3, nip
 
-        @ 6.2.2030
+        @ 6.2.2030 PICK
         code pick, 0, 4, pick
 
-        @ 6.2.2150
+        @ 6.2.2150 ROLL
         code roll, 0, 4, roll
 
         @ 6.2.2218 SOURCE-ID
         word source_id, 0, 8, source-i
           .word cf_src, cf_fetch, cf_exit
 
-        @ 6.2.2300
+        @ 6.2.2298 TRUE
+        word true, 0, 4, true
+          .word cf_false, cf_invert, cf_exit
+
+        @ 6.2.2300 TUCK
         code tuck, 0, 4, tuck
 
-        @ 7.6.1.0790
+        @ 7.6.1.0790 BLK
         variable blk, 0, 3, blk
 
-        @ 8.6.2.0420
+        @ 8.6.2.0420 2ROT
         code 2rot, 0, 4, 2rot
 
         @ C+! is not in the standarc
@@ -371,7 +504,7 @@ dict_latest=dict_2rfetch
         @ BRANCH and 0BRANCH are used internally by IF, BEGIN, etc.
         code branch, 0, 6, branch
         code 0branch, 0, 7, 0branch
-          .word cf_lit, 16, cf_base, cf_store, cf_exit
+
 
         @ SRC is an internal variable used by SOURCE-ID
         variable src, 0, 3, src
@@ -584,7 +717,137 @@ do_minus:
         push r3
         next
 
+@ Convert counted string to count and c-addr
+do_count:               @ ( c-addr -- c-addr u )
+        pop r0
+        ldrb r1, [r0]   @ Get count
+        add r0, r0, #1  @ Increment address
+        push r0
+        push r1
+        next
 
+@ Numerical comparisons
+do_0less:
+        pop r0          @ Get value to test
+        mov r1, #0      @ Init flag to 0 (false)
+        cmp r0, #0
+        bge do_0less1   @ Skip flag change if >= 0
+        sub r1, r1, #1  @ Make flag -1 (true)
+do_0less1:    push r1
+        next
+
+do_0equal:
+        pop r0          @ Get value to test
+        mov r1, #0      @ Init flag to 0 (false)
+        cmp r0, #0
+        bne do_0e1      @ Skip flag change if != 0
+        sub r1, r1, #1  @ Make flag -1 (true)
+do_0e1: push r1
+        next
+
+do_0greater:
+        pop r0          @ Get value to test
+        mov r1, #0      @ Init flag to 0 (false)
+        cmp r0, #0
+        ble do_0g1      @ Skip flag change if != 0
+        sub r1, r1, #1  @ Make flag -1 (true)
+do_0g1: push r1
+        next
+
+do_equal:               @ ( n1 n2 -- flag true iff n1 = n2 )
+        pop r2          @ Get values
+        pop a1
+        mov r0, #0      @ Initialize flag to false
+        cmp r1, r2
+        bne do_equl1    @ Skip change if r1 != r2
+        sub r0, #1      @ Change flag to true
+do_equl1:
+        push r0
+        next
+
+do_less:                @ ( n1 n2 -- flag true iff n1 < n2 )
+        pop r2          @ Get values
+        pop r1
+        mov r0, #0      @ Initialize flag to false
+        cmp r1, r2
+        bge do_less1    @ Skip change if r1 >= r2
+        sub r0, #1      @ Change flag to true
+do_less1:
+        push r0
+        next
+
+do_greater:             @ ( n1 n2 -- flag true iff n1 > n2 )
+        pop r2          @ Get values
+        pop r1
+        mov r0, #0      @ Initialize flag to false
+        cmp r1, r2
+        ble do_grtr1    @ Skip change if r1 <= r2
+        sub r0, #1      @ Change flag to true
+do_grtr1:
+        push r0
+        next
+
+@ Bitwise logical operations
+do_and:                 @ ( n1 n2 -- n1 & n2 )
+        pop r1
+        pop r2
+        and r0, r1, r2
+        push r0
+        next
+
+do_or:                 @ ( n1 n2 -- n1 | n2 )
+        pop r1
+        pop r2
+        orr r0, r1, r2
+        push r0
+        next
+
+do_xor:                @ ( n1 n2 -- n1 ^ n2 )
+        pop r1
+        pop r2
+        eor r0, r1, r2
+        push r0
+        next
+
+do_invert:              @ ( n -- n' )
+        pop r1
+        mvns r1, r1     @ Invert the bits
+        push r1
+        next
+
+do_lshift:              @ ( n u -- n left-shifted u bits )
+        pop r2
+        pop r1
+        lsl r1, r2
+        push r1
+        next
+
+do_rshift:              @ ( u1 u2 -- u1 right-shifted u2 bits )
+        pop r2
+        pop r1
+        lsr r1, r2
+        push r1
+        next
+
+do_max:                 @ ( n1 n2 -- n3, where n3 is max of n1, n2 )
+        pop r2
+        pop r1
+        cmp r1, r2
+        bge do_max1
+        mov r1, r2
+do_max1:
+        push r1
+        next
+
+do_min:                 @ ( n1 n2 -- n3, where n3 is min of n1, n2 )
+        pop r2
+        pop r1
+        cmp r1, r2
+        ble do_min1
+        mov r1, r2
+do_min1:
+        push r1
+        next
 
 @ Duplicate TOS   ( n1 -- n1 n1 )
 do_dup:
@@ -734,7 +997,7 @@ do_2swap:
 @ Dup TOS if non-zero   ( n -- 0 | n n )
 do_qdup:
         pop r1
-        teq r1, #0
+        cmp r1, #0
         beq .s
         push r1
 .s:     push r1
@@ -853,7 +1116,7 @@ div_64_32:
 
 @ Multiply/Divide, with long internal product ( n1 n2 n3 -- n1*n2/n3 )
 @ TODO: Make this generally useful (/, /mod, etc.)
-do_starslash:
+do_starslashmod:
         pop r0                  @ n3
         pop r2                  @ n2
         pop r1                  @ n1
@@ -899,6 +1162,7 @@ do_starslash:
 .dosl5: mvn r0, r0              @ No; Qf = -Qn; Rf = Rn
         add r0, r0, #1
 .dosl_done:
+        push r1                 @ Remainder to stack
         push r0                 @ Quotient to stack
         next
 
@@ -1047,13 +1311,9 @@ text_len=.-text
 target:           .byte 4
                   .ascii "over"
 start:            .word cf_cold 
-@                  .word cf_lit, 0, cf_0branch, st1-.    @ 1 if
-@                  .word   cf_lit, 3, cf_branch, st2-.   @   3
-@st1:              .word   cf_lit, 4                     @ else 4
-@st2:                                                    @ then
-@                   .word cf_lit, text, cf_lit, text_len, cf_type
-                   .word cf_here, cf_fetch, cf_cellplus
-                   .word cf_here, cf_fetch, cf_minus, cf_lit, 0x30, cf_plus, cf_emit
-                   .word cf_lit, 0, cf_bye
+                  .word cf_lit, 5, cf_0greater, cf_0branch, start1-.
+                  .word cf_lit, 0x31, cf_emit, cf_branch, start2-.
+start1:           .word cf_lit, 0x30, cf_emit
+start2:           .word cf_lit, 0, cf_bye
 
 @        end
