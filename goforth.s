@@ -57,7 +57,7 @@ IMMEDIATE=0x02
 
 
 @ Dictionary macro header
-.macro  dict label, flags, len, name, link
+.macro  dict label, flags, len, name
 dict_\label:
   .hword \flags
   .hword \len
@@ -67,31 +67,32 @@ dict_\label:
     .byte 0
    .endr
   .endif
-  .word dict_\link
+  .word dict_latest
+dict_latest=dict_\label
 .endm
 
 @ Dictionary entry for primitives (implmemented in assembler)
-.macro code label, flags, len, name, link
-  dict \label, \flags, \len, \name, \link
+.macro code label, flags, len, name
+  dict \label, \flags, \len, \name
   cf_\label: .word do_\label
 .endm
 
 @ Dictionary entry for high-level words (implemented in Forth)
-.macro word label, flags, len, name, link
-  dict \label, \flags, \len, \name, \link
+.macro word label, flags, len, name
+  dict \label, \flags, \len, \name
   cf_\label: .word do_enter
 .endm
 
 @ Dictionary entry for built-in Forth VARIABLEs
-.macro variable label, flags, len, name, link
-  dict \label, \flags, \len, \name, \link
+.macro variable label, flags, len, name
+  dict \label, \flags, \len, \name
   cf_\label: .word do_variable
   .word 0
 .endm
 
 @ Dictionary entry for built-in Forth CONSTANTs
-.macro constant label, flags, len, name, link, value
-  dict \label, \flags, \len, \name, \link
+.macro constant label, flags, len, name, value
+  dict \label, \flags, \len, \name
   cf_\label: .word do_constant
   .word \value
 .endm
@@ -115,39 +116,48 @@ dict_\label:
 @--------- Data Segment  ------------
         .data
 dict_0: .word 0         @ Terminate dictionary search here
-        code star, 0, 1, *, 0
-        code plus, 0, 1, +, star
-        code dup, 0, 3, dup, plus
-        code nip, 0, 3, nip, dup
-        code 2dup, 0, 4, 2dup, nip
-        code drop, 0, 4, drop, 2dup
-        code 2drop, 0, 5, 2drop, drop
-        code over, 0, 4, over, 2drop
-        code 2over, 0, 5, 2over, over
-        code rot, 0, 3, rot, 2over
-        code 2rot, 0, 4, 2rot, rot
-        code swap, 0, 4, swap, 2rot
-        code 2swap, 0, 5, 2swap, swap
-        code qdup, 0, 4, ?dup, 2swap
-        code depth, 0, 5, depth, qdup
-        code pick, 0, 4, pick, depth
-        code roll, 0, 4, roll, pick
-        code tuck, 0, 4, tuck, roll
-        code exit, 0, 4, exit, tuck
-        code lit, 0, 7, literal, exit
-        @ Problem here--@ is a comment marker
-        @ code fetch, 0, 1, @, lit
-dict_fetch:
+
+        @ 6.1.0010 !
+        code store, 0, 1, !
+
+        @ 6.1.0090 *
+        code star, 0, 1, *
+
+        @ 6.1.0100 */
+        code starslash, 0, 2, */
+
+        @ 6.1.0120 +
+        code plus, 0, 1, +
+
+        @ 6.1.0130 +!
+        word pstore, 0, 2, +!
+          .word cf_dup, cf_fetch, cf_rot, cf_plus, cf_swap, cf_store, cf_exit
+
+        @ Problem here--@ is a comment marker; , is a parameter separator
+        @ Similar problem elsewhere
+
+        @ 6.1.0150 ,
+        @ code comma, 0, 1, ','
+dict_comma:
         .hword 0
         .hword 1
-        .ascii "@"
+        .ascii ","
         .rept 7
         .byte 0
         .endr
-        .word dict_lit
-cf_fetch:
-        .word do_fetch        
-        @ code 2fetch, 0, 2, 2@, fetch
+        .word dict_latest
+cf_comma:
+        .word do_comma
+dict_latest=dict_comma
+
+        @ 6.1.0160 -
+        code minus, 0, 1, -
+
+        @ 6.1.0310 2!
+        code 2store, 0, 2, 2!
+
+        @ 6.1.0350 2@
+        @ code 2fetch, 0, 2, 2@
 dict_2fetch:
         .hword 0
         .hword 2
@@ -155,10 +165,76 @@ dict_2fetch:
         .rept 6
         .byte 0
         .endr
-        .word dict_fetch
+        .word dict_latest
 cf_2fetch:
         .word do_2fetch        
-        @ code cfetch, 0, 2, c@, 2fetch
+dict_latest=dict_2fetch
+
+        @ 6.1.0370 2DROP
+        code 2drop, 0, 5, 2drop
+
+        @ 6.1.0380 2DUP
+        code 2dup, 0, 4, 2dup
+
+        @ 6.1.0400 2OVER
+        code 2over, 0, 5, 2over
+
+        @ 6.1.0430 2SWAP
+        code 2swap, 0, 5, 2swap
+
+        @ 6.1.0580 >R
+        code tor, 0, 2, >r
+
+        @ 6.1.0630 ?DUP
+        code qdup, 0, 4, ?dup
+
+        @ 6.1.0650 @
+        @ code fetch, 0, 1, @
+dict_fetch:
+        .hword 0
+        .hword 1
+        .ascii "@"
+        .rept 7
+        .byte 0
+        .endr
+        .word dict_latest
+cf_fetch:
+        .word do_fetch        
+dict_latest=dict_fetch
+
+        @ 6.1.0705 ALIGN
+        word align, 0, 5, align
+          .word cf_lit, cf_here, cf_dup, cf_fetch, cf_aligned, cf_store
+          .word cf_exit
+
+        @ 6.1.0706 ALIGNED
+        code aligned, 0, 7, aligned
+
+        @ 6.1.0710 ALLOT
+        code allot, 0, 5, allot
+
+        @ 6.1.0750 BASE
+        variable base, 0, 4, base
+
+        @ 6.1.0850 C!
+        code cstore, 0, 2, c!
+
+        @ 6.1.0860 C,
+        @ code ccomma, 0, 2, 'c,'
+dict_ccomma:
+        .hword 0
+        .hword 2
+        .ascii "c,"
+        .rept 6
+        .byte 0
+        .endr
+        .word dict_latest
+cf_ccomma:
+        .word do_ccomma
+dict_latest=dict_ccomma
+
+        @ 6.1.0870 C@
+        @ code cfetch, 0, 2, c@
 dict_cfetch:
         .hword 0
         .hword 2
@@ -166,10 +242,62 @@ dict_cfetch:
         .rept 6
         .byte 0
         .endr
-        .word dict_2fetch
+        .word dict_latest
 cf_cfetch:
         .word do_cfetch        
-        @ code rfetch, 0, 2, r@, cfetch
+dict_latest=dict_cfetch
+
+        @ 6.1.0880 CELL+ 
+        word cellplus, 0, 5, cell+
+          .word cf_lit, CELL_WIDTH, cf_plus, cf_exit
+
+        @ 6.1.0890 CELLS
+        code cells, 0, 5, cells
+
+        @ 6.1.0897 CHAR+
+        word charplus, 0, 5, char+
+          .word cf_lit, 1, cf_plus, cf_exit
+
+        @ 6.1.0898 CHARS
+        word chars, 0, 5, chars
+          .word cf_exit     @ In this implementation, it's a no-op
+
+        @ 6.1.1170 DECIMAL
+        word decimal, 0, 7, decimal
+          .word cf_lit, 10, cf_base, cf_store, cf_exit
+
+        @ 6.1.1200 DEPTH
+        code depth, 0, 5, depth
+
+        @ 6.1.1260 DROP
+        code drop, 0, 4, drop
+
+        @ 6.1.1290 DUP
+        code dup, 0, 3, dup
+
+        @ 6.1.1320 EMIT
+        code emit, 0, 4, emit
+
+        @ 6.1.1380 EXIT 
+        code exit, 0, 4, exit
+
+        @ 6.1.1550 FIND
+        code find, 0, 4, find
+        
+        @ 6.1.1650 HERE
+        variable here, 0, 4, here
+        
+        @ 6.1.1780 LITERAL
+        code lit, 0, 7, literal
+
+        @ 6.1.1990 OVER
+        code over, 0, 4, over
+
+        @ 6.1.2060 R>
+        code rfrom, 0, 2, r>
+
+        @ 6.1.2070 R@
+        @ code rfetch, 0, 2, r@
 dict_rfetch:
         .hword 0
         .hword 2
@@ -177,10 +305,28 @@ dict_rfetch:
         .rept 6
         .byte 0
         .endr
-        .word dict_cfetch
+        .word dict_latest
 cf_rfetch:
         .word do_rfetch        
-        @ code 2rfetch, 0, 3, 2r@, rfetch
+dict_latest=dict_rfetch
+
+        @ 6.1.2160 ROT
+        code rot, 0, 3, rot
+
+        @ 6.1.2260 SWAP
+        code swap, 0, 4, swap
+
+        @ 6.1.2310 TYPE
+        code type, 0, 4, type
+
+        @ 6.2.0340 2>R
+        code 2tor, 0, 3, 2>r
+
+        @ 6.2.0410 2R>
+        code 2rfrom, 0, 3, 2r>
+
+        @ 6.2.0415 2R@
+        @ code 2rfetch, 0, 3, 2r@
 dict_2rfetch:
         .hword 0
         .hword 3
@@ -188,43 +334,56 @@ dict_2rfetch:
         .rept 5
         .byte 0
         .endr
-        .word dict_rfetch
+        .word dict_latest
 cf_2rfetch:
         .word do_2rfetch        
-        code store, 0, 1, !, 2rfetch
-        code 2store, 0, 2, 2!, store
-        code cstore, 0, 2, c!, 2store
-        word pstore, 0, 2, +!,cstore
-          .word cf_dup, cf_fetch, cf_rot, cf_plus, cf_swap, cf_store, cf_exit
-        word cpstore, 0, 3, c+!,pstore
-          .word cf_dup, cf_cfetch, cf_rot, cf_plus, cf_swap, cf_cstore, cf_exit
-        code 2tor, 0, 3, 2>r, cpstore
-        code 2rfrom, 0, 3, 2r>, 2tor
-        code tor, 0, 2, >r, 2rfrom
-        code rfrom, 0, 2, r>, tor
-        code emit, 0, 4, emit, rfrom
-        code type, 0, 4, type, emit
-        code starslash, 0, 2, */, type
-        code branch, 0, 6, branch, starslash
-        code 0branch, 0, 7, 0branch, branch
-        code find, 0, 4, find, 0branch
-        variable here, 0, 4, here, find
-        variable base, 0, 4, base, here
-        word decimal, 0, 7, decimal, base
-          .word cf_lit, 10, cf_base, cf_store, cf_exit
-        word hex, 0, 3, hex, decimal
-          .word cf_lit, 16, cf_base, cf_store, cf_exit
-        variable blk, 0, 3, blk, decimal
-        variable src, 0, 3, src, blk
-        word source_id, 0, 8, source-i, src
+dict_latest=dict_2rfetch
+
+        @ 6.2.1660 HEX
+        word hex, 0, 3, hex
+
+        @ 6.2.1930 NIP
+        code nip, 0, 3, nip
+
+        @ 6.2.2030
+        code pick, 0, 4, pick
+
+        @ 6.2.2150
+        code roll, 0, 4, roll
+
+        @ 6.2.2218 SOURCE-ID
+        word source_id, 0, 8, source-i
           .word cf_src, cf_fetch, cf_exit
-        word cold, IMMEDIATE, 4, cold, blk
-          .word cf_lit, dict_bye, cf_here, cf_store
+
+        @ 6.2.2300
+        code tuck, 0, 4, tuck
+
+        @ 7.6.1.0790
+        variable blk, 0, 3, blk
+
+        @ 8.6.2.0420
+        code 2rot, 0, 4, 2rot
+
+        @ C+! is not in the standarc
+        word cpstore, 0, 3, c+!
+          .word cf_dup, cf_cfetch, cf_rot, cf_plus, cf_swap, cf_cstore, cf_exit
+
+        @ BRANCH and 0BRANCH are used internally by IF, BEGIN, etc.
+        code branch, 0, 6, branch
+        code 0branch, 0, 7, 0branch
+          .word cf_lit, 16, cf_base, cf_store, cf_exit
+
+        @ SRC is an internal variable used by SOURCE-ID
+        variable src, 0, 3, src
+
+        @ Interpreter words
+        word cold, IMMEDIATE, 4, cold
+          .word cf_lit, dict_end, cf_here, cf_store
           .word cf_lit, 10, cf_base, cf_store
           .word cf_lit, 0, cf_blk, cf_store
           .word cf_lit, 0, cf_src, cf_store
           .word cf_exit
-        code bye, 0, 3, bye, cold       @@@ Keep as last word
+        code bye, 0, 3, bye       @@@ Keep as last word
 
 @ Save space for dictionary
 dict_end: .word dict_bye
@@ -416,6 +575,15 @@ do_plus:
         add r3, r1, r2
         push r3
         next
+
+@ Subtract TOS from 2d, leaving one-cell differenct TOS ( n1 n2 -- n1-n2 )
+do_minus:
+        pop r2
+        pop r1
+        sub r3, r1, r2
+        push r3
+        next
+
 
 
 @ Duplicate TOS   ( n1 -- n1 n1 )
@@ -813,6 +981,51 @@ do_find_failed:
 do_find_done:
         next
 
+@ Add word to dictionary
+do_comma:
+        pop r0                  @ Get word from TOS
+        ldr r1, addr_here       @ Get address of HERE
+        ldr r2, [r1]            @ Get address of next dictionary entry
+        str r0, [r2]            
+        add r0, r2, #CELL_WIDTH @ Bump HERE
+        str r0, [r1]
+        next
+
+@ Add byte to dictionary
+do_ccomma:
+        pop r0                  @ Get byte from TOS
+        ldr r1, addr_here       @ Get address of HERE
+        ldr r2, [r1]            @ Get address of next dictionary entry
+        strb r0, [r2]            
+        add r0, r2, #1          @ Bump HERE
+        str r0, [r1]
+        next
+
+@ Align address (depends on 4-byte cells)
+do_aligned:
+        pop r0                  @ Get address from TOS
+        add r0, r0, #3          @ Add 3, and mask overflow
+        lsr r0, #2
+        lsl r0, #2
+        push r0
+        next
+
+@ Allot space in the dictionary
+do_allot:
+        pop r0                  @ Get byte count (positive, negative, or zero)
+        ldr r1, addr_here       @ Get address of HERE
+        ldr r2, [r1]            @ Get address of next dictionary entry
+        add r0, r2, r0          @ Bump HERE by specified amount
+        str r0, [r1]            @ Store result in HERE
+        next
+
+@ Compute the size in bytes of the specified number of cells
+do_cells:
+        pop r0                  @ Get number of cells
+        lsl r0, #2              @ Depends on CELL_WIDTH = 4
+        push r0
+        next
+
 @ Main entry point
 _start:
         ldr r13, addr_stack_high
@@ -839,7 +1052,8 @@ start:            .word cf_cold
 @st1:              .word   cf_lit, 4                     @ else 4
 @st2:                                                    @ then
 @                   .word cf_lit, text, cf_lit, text_len, cf_type
-                   .word cf_lit, target, cf_find 
-                   .word cf_bye
+                   .word cf_here, cf_fetch, cf_cellplus
+                   .word cf_here, cf_fetch, cf_minus, cf_lit, 0x30, cf_plus, cf_emit
+                   .word cf_lit, 0, cf_bye
 
 @        end
