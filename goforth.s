@@ -5,6 +5,7 @@
 @    (cf) http://www.sifflez.org/lectures/ASE/C3.pdf
 @    (cf) https://github.com/AlexandreAbreu/jonesforth
 @         Referred to herein as "JonesForth"
+@    (cf) 
 @
 @ Environment Controls
 CELL_WIDTH=4
@@ -54,6 +55,7 @@ CELL_WIDTH=4
 @   b1 -- Immediate@ word executes during compilation
 INVISIBLE=0x01
 IMMEDIATE=0x02
+SMUDGE=0x04
 
 
 @ Dictionary macro header
@@ -104,7 +106,7 @@ dict_latest=dict_\label
 .endm
 
 @ OS System call
-@  For codes see /usr/include/.../asm/unistd.h
+@  For codes see /usr/include/arm-linux-gnueabihf/asm/unistd.h
 @  For calling sequence see http://man7.org/linux/man-pages/man2/syscall.2.html, and use
 @    the lines for arm/EABI
 .macro syscall calltype
@@ -247,6 +249,9 @@ dict_latest=dict_equal
         @ 6.1.0540 >
         code greater, 0, 1, >
 
+        @ 6.1.0560 >IN
+        variable toin, 0, 3, >in
+
         @ 6.1.0580 >R
         code tor, 0, 2, >r
 
@@ -266,6 +271,9 @@ dict_fetch:
 cf_fetch:
         .word do_fetch        
 dict_latest=dict_fetch
+
+        @ 6.1.0695 ACCEPT (c-addr n1 -- n2 )
+        code accept, 0, 6, accept
 
         @ 6.1.0705 ALIGN
         word align, 0, 5, align
@@ -368,6 +376,9 @@ dict_latest=dict_cfetch
         @ 6.1.1720 INVERT
         code invert, 0, 6, invert
         
+        @ 6.1.1750 KEY
+        code key, 0, 3, key
+
         @ 6.1.1780 LITERAL
         code lit, 0, 7, literal
 
@@ -422,6 +433,9 @@ dict_latest=dict_rfetch
 spaces_1: .word cf_qdup, cf_0equal, cf_invert, cf_0branch, spaces_2-.
           .word cf_space, cf_oneminus, cf_branch, spaces_1-.
 spaces_2: .word cf_exit
+
+        @ 6.1.2250 STATE
+        variable state, SMUDGE, 5, state
 
         @ 6.1.2260 SWAP
         code swap, 0, 4, swap
@@ -515,6 +529,7 @@ dict_latest=dict_2rfetch
           .word cf_lit, 10, cf_base, cf_store
           .word cf_lit, 0, cf_blk, cf_store
           .word cf_lit, 0, cf_src, cf_store
+          .word cf_lit, 0, cf_state, cf_store
           .word cf_exit
         code bye, 0, 3, bye       @@@ Keep as last word
 
@@ -542,16 +557,17 @@ rstack_high:
 @--------- Text Segment -------------
 @ Start of implementation code
         .text
-.global _start
+@.global _start
+.global main
         
 @ The Forth Interpreter
 
 do_enter:                               @ Pseudocode from MF:
-        pushrs r9                      @ PUSH IP
+        pushrs r9                       @ PUSH IP
         add r9, r10, #CELL_WIDTH        @ W+2 -> IP
         b do_next
 do_exit:
-        poprs r9                       @ POP IP (from return stack)
+        poprs r9                        @ POP IP (from return stack)
 do_next:                                @ JUMP to interpreter ("NEXT")
         ldr r10, [r9]                   @ (IP) -> W
         add r9, r9, #CELL_WIDTH         @ IP + 2 -> IP
@@ -580,6 +596,18 @@ do_type:
         pop r2                          @ Character count
         pop r1                          @ Address of text
         b do_emit2
+
+@ Get single kestroke from keyboard
+@ According to all that I can learn from the web, in order to get a single character
+@ without resorting to waiting for an entire line, I have to call the C functions
+@ tcgetattr() and tcsetattr().
+do_key:                         @ ( -- char )
+        mov r0, #0              @ Make room for it on the stack; also, 0 = stdin
+        push r0                 @ Now sp points to where the character goes
+        mov r1, sp              @ Buffer pointer to r1
+        mov r2, #1              @ Get one character
+        syscall 3               @ Call read()
+        next 
 
 @ Built-in primitive code
 @ Push address of defined variable
@@ -1186,6 +1214,9 @@ do_find:                        @ ( c-addr -- c-addr 0 | xt 1 | xt -1 )
         ldr r2, addr_here       @ Get current value of HERE
         ldr r2,[r2]
 do_find_loop:
+        ldrh r3, [r2]           @ Skip SMUDGEd words
+        and r3, r3, #SMUDGE
+        bne do_find_mismatch
         ldrh r3, [r2, #2]       @ r3 now holds length of dictionary entry
         add r4, r2, #CELL_WIDTH
                                 @ Compare [r0, r1] to [r4, r3]
@@ -1290,8 +1321,18 @@ do_cells:
         push r0
         next
 
+@ 6.1.0695 ACCEPT 
+do_accept:                      @ ( c-addr n1 -- n2) n1 = max, n2 = actual
+        pop r1
+        pop r0
+do_accept_start:
+        bl do_key
+
+        next
+
 @ Main entry point
-_start:
+@_start:
+main:
         ldr r13, addr_stack_high
         ldr r11, addr_rstack_high
         
@@ -1311,9 +1352,7 @@ text_len=.-text
 target:           .byte 4
                   .ascii "over"
 start:            .word cf_cold 
-                  .word cf_lit, 5, cf_0greater, cf_0branch, start1-.
-                  .word cf_lit, 0x31, cf_emit, cf_branch, start2-.
-start1:           .word cf_lit, 0x30, cf_emit
+                  .word cf_lit, 0x39, cf_emit
 start2:           .word cf_lit, 0, cf_bye
 
 @        end
